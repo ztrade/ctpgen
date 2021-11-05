@@ -1,11 +1,25 @@
 package main
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	"github.com/go-clang/bootstrap/clang"
+)
+
+var (
+	//go:embed tpl/spi_header.tpl
+	SpiCppHeader string
+	//go:embed tpl/spi_cpp.tpl
+	SpiCppSource string
+	//go:embed tpl/spi.tpl
+	SpiGoSource string
 )
 
 type Argument struct {
@@ -25,19 +39,9 @@ type SpiClass struct {
 }
 
 func ParseSpi(file string) (spi *SpiClass, err error) {
-	idx := clang.NewIndex(0, 1)
-	defer idx.Dispose()
-	tu := idx.ParseTranslationUnit(file, []string{"-std=c++11"}, nil, 0)
-	defer tu.Dispose()
-
-	diagnostics := tu.Diagnostics()
-	for _, d := range diagnostics {
-		fmt.Println("PROBLEM:", d.Spelling())
-	}
-	cursor := tu.TranslationUnitCursor()
 	var cls clang.Cursor
 	spi = &SpiClass{Src: file}
-	cursor.Visit(func(cursor, parent clang.Cursor) clang.ChildVisitResult {
+	fn := func(cursor, parent clang.Cursor) clang.ChildVisitResult {
 		if cursor.IsNull() {
 			fmt.Printf("cursor: <none>\n")
 			return clang.ChildVisit_Continue
@@ -66,13 +70,14 @@ func ParseSpi(file string) (spi *SpiClass, err error) {
 		}
 
 		return clang.ChildVisit_Continue
-	})
+	}
+	err = WalkFile(file, fn)
+	if err != nil {
+		return
+	}
 	if spi.Name == "" {
 		err = fmt.Errorf("spi not found")
 		return
-	}
-	if len(diagnostics) > 0 {
-		fmt.Println("NOTE: There were problems while analyzing the given file")
 	}
 	return
 }
@@ -98,5 +103,119 @@ func (s *SpiClass) Generate(pkg, prefix, dir string) (err error) {
 	if err != nil {
 		err = fmt.Errorf("generate go source failed:%w", err)
 	}
+	return
+}
+
+func isNotLast(i, total int) bool {
+	return i != (total - 1)
+}
+func toUpperMacro(str string) string {
+	buf := bytes.ToUpper([]byte(str))
+	for k, v := range buf {
+		if v == '.' {
+			buf[k] = '_'
+		}
+	}
+	return string(buf)
+}
+func (s *SpiClass) GenerateCppHeader(file string) (err error) {
+	fName := filepath.Base(file)
+
+	clsName := s.Name + "Impl"
+	headerData := map[string]interface{}{
+		"HeaderOnce": toUpperMacro(fName),
+		"src":        s.Src,
+		"className":  clsName,
+		"name":       s.Name,
+		"methods":    s.Methods,
+	}
+	var fns template.FuncMap = map[string]interface{}{
+		"isNotLast": isNotLast,
+	}
+	tmpl, err := template.New("spi").Funcs(fns).Parse(SpiCppHeader)
+	if err != nil {
+		return
+	}
+
+	f, err := os.Create(file)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	err = tmpl.Execute(f, headerData)
+	return
+}
+
+func (s *SpiClass) GenerateCppSource(prefix, header, file string) (err error) {
+	clsName := s.Name + "Impl"
+	headerData := map[string]interface{}{
+		"Header":    header,
+		"src":       s.Src,
+		"className": clsName,
+		"name":      s.Name,
+		"methods":   s.Methods,
+		"prefix":    prefix,
+	}
+	var fns template.FuncMap = map[string]interface{}{
+		"isNotLast": isNotLast,
+	}
+	tmpl, err := template.New("spi").Funcs(fns).Parse(SpiCppSource)
+	if err != nil {
+		return
+	}
+
+	f, err := os.Create(file)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	err = tmpl.Execute(f, headerData)
+	return
+}
+
+func (s *SpiClass) GenerateGo(prefix, pkg, file string) (err error) {
+	clsName := s.Name
+	methods := make([]ClassMethod, len(s.Methods))
+	for k, v := range s.Methods {
+		methods[k].Name = v.Name
+		methods[k].Args = make([]Argument, len(v.Args))
+		for argi, arg := range v.Args {
+			methods[k].Args[argi].Name = arg.Name
+			methods[k].Args[argi].Type = goTypeStyle(arg.Type)
+		}
+	}
+	headerData := map[string]interface{}{
+		"package":   pkg,
+		"include":   "types_gen.h",
+		"className": clsName,
+		"name":      s.Name,
+		"methods":   methods,
+		"prefix":    prefix,
+	}
+	var fns template.FuncMap = map[string]interface{}{
+		"isNotLast": isNotLast,
+	}
+	tmpl, err := template.New("spigo").Funcs(fns).Parse(SpiGoSource)
+	if err != nil {
+		return
+	}
+
+	f, err := os.Create(file)
+	if err != nil {
+		return
+	}
+	defer func() {
+		f.Close()
+		if err != nil {
+			return
+		}
+		cmd := exec.Command("gofmt", "-w", file)
+		buf, err1 := cmd.CombinedOutput()
+		if err1 != nil {
+			fmt.Println("gofmt error:", err1.Error())
+		}
+		fmt.Println(string(buf))
+	}()
+	err = tmpl.Execute(f, headerData)
 	return
 }

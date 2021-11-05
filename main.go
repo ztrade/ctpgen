@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"path/filepath"
 )
 
 var (
-	src    = flag.String("s", "", "source spi header file")
+	src    = flag.String("s", "", "source dir")
 	pkg    = flag.String("pkg", "ctp", "pkg name")
 	prefix = flag.String("p", "", "generate code prefix, md/td")
 	dir    = flag.String("o", "./", "generate code dir")
@@ -18,12 +19,20 @@ func main() {
 		flag.PrintDefaults()
 		return
 	}
-	spi, err := ParseSpi(*src)
+	dataTypeFile := filepath.Join(*src, "ThostFtdcUserApiDataType.h")
+	structFile := filepath.Join(*src, "ThostFtdcUserApiStruct.h")
+	structList, err := ParseStructData(structFile, dataTypeFile)
+	err = structList.Generate(*pkg, *dir)
 	if err != nil {
 		fmt.Println(err.Error())
+		return
 	}
-	err = spi.Generate(*pkg, *prefix, *dir)
+	mdApi := filepath.Join(*src, "ThostFtdcMdApi.h")
+	spi, err := ParseSpi(mdApi)
 	if err != nil {
 		fmt.Println(err.Error())
+		return
 	}
+	spi.Generate(*pkg, "md", *dir)
+
 }
