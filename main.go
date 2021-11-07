@@ -28,11 +28,34 @@ func main() {
 		return
 	}
 	mdApi := filepath.Join(*src, "ThostFtdcMdApi.h")
-	spi, err := ParseSpi(mdApi)
+	err = generateApi(mdApi, "ctp", "md", *dir)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
-	spi.Generate(*pkg, "md", *dir)
 
+	tdApi := filepath.Join(*src, "ThostFtdcTraderApi.h")
+	err = generateApi(tdApi, "ctp", "td", *dir)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+}
+
+func generateApi(file, pkg, prefix, dir string) (err error) {
+	spi, err := ParseSpi(file)
+	if err != nil {
+		return
+	}
+	err = spi.Generate(pkg, prefix, dir)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	api, err := ParseApi(file)
+	if err != nil {
+		return
+	}
+	err = api.Generate(pkg, prefix, dir)
+	return
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	_ "embed"
 	"fmt"
 	"os"
@@ -14,34 +13,26 @@ import (
 )
 
 var (
-	//go:embed tpl/spi_header.tpl
-	SpiCppHeader string
-	//go:embed tpl/spi_cpp.tpl
-	SpiCppSource string
-	//go:embed tpl/spi.tpl
-	SpiGoSource string
+	//go:embed tpl/api_header.tpl
+	ApiCppHeader string
+	//go:embed tpl/api_cpp.tpl
+	ApiCppSource string
+	//go:embed tpl/api.tpl
+	ApiGoSource string
 )
 
-type Argument struct {
-	Name string
-	Type string
+type ApiClass struct {
+	Name          string
+	Src           string
+	StaticMethods []ClassMethod
+	Methods       []ClassMethod
+	spiName       string
+	SpiImplFile   string
 }
 
-type ClassMethod struct {
-	Name string
-	Args []Argument
-	Ret  string
-}
-
-type SpiClass struct {
-	Name    string
-	Src     string
-	Methods []ClassMethod
-}
-
-func ParseSpi(file string) (spi *SpiClass, err error) {
+func ParseApi(file string) (api *ApiClass, err error) {
 	var cls clang.Cursor
-	spi = &SpiClass{Src: file}
+	api = &ApiClass{Src: file}
 	fn := func(cursor, parent clang.Cursor) clang.ChildVisitResult {
 		if cursor.IsNull() {
 			fmt.Printf("cursor: <none>\n")
@@ -49,22 +40,31 @@ func ParseSpi(file string) (spi *SpiClass, err error) {
 		}
 		switch cursor.Kind() {
 		case clang.Cursor_ClassDecl:
-			if strings.HasSuffix(cursor.Spelling(), "Spi") {
+			if strings.HasSuffix(cursor.Spelling(), "Api") {
 				cls = cursor
-				spi.Name = cls.Spelling()
+				api.Name = cls.Spelling()
 				return clang.ChildVisit_Recurse
+			}
+			if strings.HasSuffix(cursor.Spelling(), "Spi") {
+				api.spiName = cursor.Spelling()
 			}
 			return clang.ChildVisit_Continue
 		case clang.Cursor_CXXMethod:
 			if parent != cls {
 				return clang.ChildVisit_Continue
 			}
+
 			method := ClassMethod{Name: cursor.Spelling()}
 			for i := int32(0); i != cursor.NumArguments(); i++ {
 				arg := cursor.Argument(uint32(i))
 				method.Args = append(method.Args, Argument{Name: arg.Spelling(), Type: arg.Type().Spelling()})
 			}
-			spi.Methods = append(spi.Methods, method)
+			method.Ret = cursor.ResultType().Spelling()
+			if cursor.CXXMethod_IsStatic() {
+				api.StaticMethods = append(api.StaticMethods, method)
+			} else {
+				api.Methods = append(api.Methods, method)
+			}
 			return clang.ChildVisit_Continue
 		case clang.Cursor_EnumDecl, clang.Cursor_StructDecl, clang.Cursor_Namespace:
 			return clang.ChildVisit_Continue
@@ -76,29 +76,29 @@ func ParseSpi(file string) (spi *SpiClass, err error) {
 	if err != nil {
 		return
 	}
-	if spi.Name == "" {
+	if api.Name == "" {
 		err = fmt.Errorf("spi not found")
 		return
 	}
 	return
 }
 
-func (s *SpiClass) Generate(pkg, prefix, dir string) (err error) {
-	headerFile := "gen_" + prefix + "_spi.h"
+func (s *ApiClass) Generate(pkg, prefix, dir string) (err error) {
+	headerFile := "gen_" + prefix + "_api.h"
 	header := filepath.Join(dir, headerFile)
-	err = s.GenerateCppHeader(header)
+	err = s.GenerateCppHeader(prefix, header)
 	if err != nil {
 		err = fmt.Errorf("generate cpp header failed:%w", err)
 		return
 	}
-	cppFile := "gen_" + prefix + "_spi.cpp"
+	cppFile := "gen_" + prefix + "_api.cpp"
 	cpp := filepath.Join(dir, cppFile)
 	err = s.GenerateCppSource(prefix, headerFile, cpp)
 	if err != nil {
 		err = fmt.Errorf("generate cpp source failed:%w", err)
 		return
 	}
-	goFile := "gen_" + prefix + "_spi.go"
+	goFile := "gen_" + prefix + "_api.go"
 	goF := filepath.Join(dir, goFile)
 	err = s.GenerateGo(prefix, pkg, goF)
 	if err != nil {
@@ -107,33 +107,22 @@ func (s *SpiClass) Generate(pkg, prefix, dir string) (err error) {
 	return
 }
 
-func isNotLast(i, total int) bool {
-	return i != (total - 1)
-}
-func toUpperMacro(str string) string {
-	buf := bytes.ToUpper([]byte(str))
-	for k, v := range buf {
-		if v == '.' {
-			buf[k] = '_'
-		}
-	}
-	return string(buf)
-}
-func (s *SpiClass) GenerateCppHeader(file string) (err error) {
+func (s *ApiClass) GenerateCppHeader(prefix, file string) (err error) {
 	fName := filepath.Base(file)
-
-	clsName := s.Name + "Impl"
 	headerData := map[string]interface{}{
-		"HeaderOnce": toUpperMacro(fName),
-		"src":        s.Src,
-		"className":  clsName,
-		"name":       s.Name,
-		"methods":    s.Methods,
+		"HeaderOnce":     toUpperMacro(fName),
+		"include":        "gen_types.h",
+		"prefix":         prefix,
+		"methods":        s.Methods,
+		"static_methods": s.StaticMethods,
+		"className":      s.Name,
 	}
 	var fns template.FuncMap = map[string]interface{}{
-		"isNotLast": isNotLast,
+		"cMethod":    func(method string) string { return cMethod(prefix, method) },
+		"isSameType": isSameType,
+		"cType":      cType,
 	}
-	tmpl, err := template.New("spi_header").Funcs(fns).Parse(SpiCppHeader)
+	tmpl, err := template.New("api").Funcs(fns).Parse(ApiCppHeader)
 	if err != nil {
 		return
 	}
@@ -147,20 +136,24 @@ func (s *SpiClass) GenerateCppHeader(file string) (err error) {
 	return
 }
 
-func (s *SpiClass) GenerateCppSource(prefix, header, file string) (err error) {
-	clsName := s.Name + "Impl"
+func (s *ApiClass) GenerateCppSource(prefix, header, file string) (err error) {
+	clsName := s.Name
 	headerData := map[string]interface{}{
-		"Header":    header,
-		"src":       s.Src,
-		"className": clsName,
-		"name":      s.Name,
-		"methods":   s.Methods,
-		"prefix":    prefix,
+		"Header":         header,
+		"include":        s.Src,
+		"className":      clsName,
+		"methods":        s.Methods,
+		"static_methods": s.StaticMethods,
+		"prefix":         prefix,
+		"spiName":        s.spiName,
+		"spiFile":        fmt.Sprintf("gen_%s_spi.h", prefix),
 	}
 	var fns template.FuncMap = map[string]interface{}{
-		"isNotLast": isNotLast,
+		"cMethod":    func(method string) string { return cMethod(prefix, method) },
+		"isSameType": isSameType,
+		"cType":      cType,
 	}
-	tmpl, err := template.New("spi_cpp").Funcs(fns).Parse(SpiCppSource)
+	tmpl, err := template.New("api_cpp").Funcs(fns).Parse(ApiCppSource)
 	if err != nil {
 		return
 	}
@@ -174,11 +167,16 @@ func (s *SpiClass) GenerateCppSource(prefix, header, file string) (err error) {
 	return
 }
 
-func (s *SpiClass) GenerateGo(prefix, pkg, file string) (err error) {
+func (s *ApiClass) GenerateGo(prefix, pkg, file string) (err error) {
 	clsName := s.Name
 	methods := make([]ClassMethod, len(s.Methods))
+	staticMethods := []ClassMethod{}
+	for _, v := range s.StaticMethods {
+		staticMethods = append(staticMethods, v)
+	}
 	for k, v := range s.Methods {
 		methods[k].Name = v.Name
+		methods[k].Ret = v.Ret
 		methods[k].Args = make([]Argument, len(v.Args))
 		for argi, arg := range v.Args {
 			methods[k].Args[argi].Name = arg.Name
@@ -186,19 +184,26 @@ func (s *SpiClass) GenerateGo(prefix, pkg, file string) (err error) {
 		}
 	}
 	headerData := map[string]interface{}{
-		"package":   pkg,
-		"include":   "gen_types.h",
-		"className": clsName,
-		"name":      s.Name,
-		"methods":   methods,
-		"prefix":    prefix,
+		"package":        pkg,
+		"include":        fmt.Sprintf("gen_%s_api.h", prefix),
+		"name":           clsName,
+		"methods":        methods,
+		"prefix":         prefix,
+		"static_methods": staticMethods,
+		"spiName":        s.spiName,
 	}
 	var fns template.FuncMap = map[string]interface{}{
-		"cTypeInGo": cTypeInGo,
-		"goType":    goType,
-		"cToGo":     cToGo,
+		"cMethod":    func(method string) string { return cMethod(prefix, method) },
+		"goType":     goType,
+		"goToC":      goToC,
+		"cToGo":      cToGo,
+		"isSameType": isSameType,
+		"isStrArray": isStrArray,
+		"goMethod":   goMethod,
+		"isNeedFree": isNeedFree,
+		"freeMethod": freeMethod,
 	}
-	tmpl, err := template.New("spi_go").Funcs(fns).Parse(SpiGoSource)
+	tmpl, err := template.New("api_go").Funcs(fns).Parse(ApiGoSource)
 	if err != nil {
 		return
 	}

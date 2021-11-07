@@ -9,7 +9,7 @@ import (
 func WalkFile(file string, fn clang.CursorVisitor) (err error) {
 	idx := clang.NewIndex(0, 1)
 	defer idx.Dispose()
-	tu := idx.ParseTranslationUnit(file, []string{"-std=c++11"}, nil, 0)
+	tu := idx.ParseTranslationUnit(file, []string{"-x", "c++"}, nil, 0)
 	defer tu.Dispose()
 
 	diagnostics := tu.Diagnostics()

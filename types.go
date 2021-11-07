@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"text/template"
 
 	"github.com/go-clang/bootstrap/clang"
@@ -35,24 +34,6 @@ type StructList struct {
 	Datas []*Struct
 }
 
-func goType(cType string) string {
-	switch cType {
-	case "int", "int64":
-		return "int"
-	case "double":
-		return "float64"
-	case "short":
-		return "int16"
-	case "char":
-		return "byte"
-	default:
-		if strings.Contains(cType, "char [") {
-			return "string"
-		}
-	}
-	return cType
-}
-
 func (sl *StructList) Generate(pkg, dir string) (err error) {
 	err = sl.GenerateCpp(pkg, dir)
 	if err != nil {
@@ -76,7 +57,7 @@ func (sl *StructList) GenerateGo(pkg, dir string) (err error) {
 	if err != nil {
 		return
 	}
-	file := filepath.Join(dir, "types_gen.go")
+	file := filepath.Join(dir, "gen_types.go")
 	f, err := os.Create(file)
 	if err != nil {
 		return
@@ -99,7 +80,7 @@ func (sl *StructList) GenerateGo(pkg, dir string) (err error) {
 
 func (sl *StructList) GenerateCpp(pkg, dir string) (err error) {
 	data := map[string]interface{}{
-		"HeaderOnce": "_TYPES_GEN_H_",
+		"HeaderOnce": "_GEN_TYPES_H_",
 		"src":        sl.src,
 		"structs":    sl.Datas,
 	}
@@ -107,7 +88,7 @@ func (sl *StructList) GenerateCpp(pkg, dir string) (err error) {
 	if err != nil {
 		return
 	}
-	file := filepath.Join(dir, "types_gen.h")
+	file := filepath.Join(dir, "gen_types.h")
 	f, err := os.Create(file)
 	if err != nil {
 		return
