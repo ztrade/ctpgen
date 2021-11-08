@@ -6,6 +6,7 @@ package {{.package}}
 #include "{{.include}}"
 */
 import "C"
+import "fmt"
 
 type {{.className}} interface{
 {{range $method := .methods}}
@@ -20,6 +21,23 @@ type {{.className}} interface{
 )
 {{ end }}
 }
+
+type {{.className}}Base struct{
+}
+{{range $method := .methods}}
+{{- $lenArg := len $method.Args -}}
+func (b *{{$.className}}Base){{$method.Name}}(
+{{- range $i, $arg := $method.Args}}
+    {{- if ne $i 0 -}}
+    ,
+    {{- end -}}
+    {{- $arg.Name}} {{goType $arg.Type}}
+{{- end -}}
+){
+    fmt.Println("{{$method.Name}}")
+}
+{{ end }}
+
 
 
 func get{{.className}}(ptr uint64) {{.className}}{

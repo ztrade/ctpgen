@@ -175,6 +175,7 @@ func isNeedFree(typ string) bool {
 }
 
 func freeMethod(typ, prefix, arg string) string {
+	return ""
 	switch typ {
 	case "char *":
 		return fmt.Sprintf("freeCStr(%s%s)", prefix, arg)
