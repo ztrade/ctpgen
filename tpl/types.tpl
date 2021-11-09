@@ -22,10 +22,13 @@ type {{$struct.Name}} struct{
 }
 
 func New{{$struct.Name}}(p *C.{{$struct.Name}}) *{{$struct.Name}}{
+  if p == nil{
+    return nil
+  }
   ret := new({{$struct.Name}})
   {{range $field := $struct.Fields -}}
     {{if isCStr $field.Type -}}
-  ret.{{$field.Name}} = c2goStr(&p.{{$field.Name}}[0], C.sizeof_{{$struct.Name}})
+  ret.{{$field.Name}} = c2goStr(&p.{{$field.Name}}[0], {{strLen $field.Type}})
     {{else -}}
   ret.{{$field.Name}} = {{goType $field.Type}}(p.{{$field.Name}})
     {{end -}}
@@ -37,7 +40,7 @@ func {{$struct.Name}}CValue(s *{{$struct.Name}}) *C.{{$struct.Name}} {
   ptr := (*C.{{$struct.Name}})(C.malloc(C.sizeof_{{$struct.Name}}))
   {{range $field := $struct.Fields -}}
     {{if isCStr $field.Type -}}
-    go2cStr(s.{{$field.Name}}, &ptr.{{$field.Name}}[0], C.sizeof_{{$struct.Name}})
+    go2cStr(s.{{$field.Name}}, &ptr.{{$field.Name}}[0], {{strLen $field.Type}})
     {{else -}}
     ptr.{{$field.Name}} = C.{{$field.Type}}(s.{{$field.Name}})
     {{end -}}

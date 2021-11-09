@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -168,6 +169,9 @@ func isNeedFree(typ string) bool {
 	if typ == "char *" || typ == "char *[]" {
 		return true
 	}
+	if strings.Contains(typ, "Spi *") {
+		return false
+	}
 	if typ[len(typ)-1] == '*' {
 		return true
 	}
@@ -175,7 +179,6 @@ func isNeedFree(typ string) bool {
 }
 
 func freeMethod(typ, prefix, arg string) string {
-	return ""
 	switch typ {
 	case "char *":
 		return fmt.Sprintf("freeCStr(%s%s)", prefix, arg)
@@ -186,4 +189,16 @@ func freeMethod(typ, prefix, arg string) string {
 		return fmt.Sprintf("C.free(unsafe.Pointer(%s%s))", prefix, arg)
 	}
 	return ""
+}
+
+func strLen(typ string) int {
+	typ = strings.Replace(typ, "char [", "", 1)
+	typ = strings.Replace(typ, "]", "", 1)
+	typ = strings.Trim(typ, " ")
+	n, err := strconv.Atoi(typ)
+	if err != nil {
+		fmt.Println("atoi failed:", typ)
+		return 1
+	}
+	return n
 }

@@ -3,7 +3,7 @@ package {{.package}}
 
 //#include "{{.include}}"
 import "C"
-//import "unsafe"
+import "unsafe"
 
 func {{.spiName}}CValue(ptr {{.spiName}}) C.{{.prefix}}Spi{
     v := storeGoPtr(ptr)
