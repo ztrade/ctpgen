@@ -13,6 +13,7 @@ func {{.spiName}}CValue(ptr {{.spiName}}) C.{{.prefix}}Spi{
 
 type {{.name}} struct{
      p C.{{.prefix}}Api
+     spi C.{{.prefix}}Spi
 }
 
 {{range $method := .static_methods}}
@@ -72,7 +73,6 @@ func (a *{{$.name}}){{$method.Name}}(
       {{- end -}}
       C.{{cMethod $method.Name}}(a.p, cStr, nCount)
   {{- else -}}
-
   {{- range $i,$arg := $method.Args }}
   c{{$arg.Name}} := {{goToC $arg.Type}}({{$arg.Name}})
   {{- if isNeedFree $arg.Type}}
@@ -81,7 +81,6 @@ func (a *{{$.name}}){{$method.Name}}(
   }()
   {{- end}}
   {{- end}}
-
   {{if ne $method.Ret "void"}}
   ret :=
   {{- end -}}
@@ -91,8 +90,21 @@ func (a *{{$.name}}){{$method.Name}}(
     {{- end -}}
 )
   {{end}}
-  {{- if ne $method.Ret "void"}}
+  {{if ne $method.Ret "void" -}}
   return {{cToGo $method.Ret "" "ret"}}
-  {{- end }}
+  {{- end}}
+  {{- if eq $method.Name "Release" -}}
+  if a.spi != nil{
+    C.{{$.prefix}}_spi_free(a.spi)
+    a.spi = nil
+  }
+  {{- else -}}
+    {{- if eq $method.Name "RegisterSpi" -}}
+    if a.spi != nil{
+      C.{{$.prefix}}_spi_free(a.spi)
+    }
+    a.spi = cpSpi
+    {{- end}}
+  {{- end}}
 }
 {{end}}

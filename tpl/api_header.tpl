@@ -11,6 +11,7 @@ typedef void* {{.prefix}}Api;
 typedef void* {{.prefix}}Spi;
 
 {{.prefix}}Spi {{.prefix}}_new_spi(uint64_t value);
+void {{.prefix}}_spi_free({{.prefix}}Spi p);
 {{range $method := .static_methods}}
 {{if isSameType $method.Ret $.className}}
 {{$.prefix}}Api {{cMethod $method.Name}}(

@@ -8,6 +8,11 @@
   return {{.prefix}}Spi(p);
 }
 
+void {{.prefix}}_spi_free({{.prefix}}Spi p){
+  {{.spiName}}Impl *ptr = ({{.spiName}}Impl *)p;
+  delete ptr;
+}
+
 {{range $method := .static_methods}}
 {{if isSameType $method.Ret $.className}}
 {{$.prefix}}Api {{cMethod $method.Name}}(
