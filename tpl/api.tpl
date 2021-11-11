@@ -41,7 +41,7 @@ func {{goMethod $.prefix}}{{$method.Name}}(
     return ret
     {{- else}}
       {{- if ne $method.Ret "void"}}
-      ret := {{cToGo $method.Ret}}(cRet)
+      ret := {{cToGo $method.Ret "" "cRet"}}
       return ret
       {{- end}}
     {{- end}}
@@ -92,7 +92,7 @@ func (a *{{$.name}}){{$method.Name}}(
 )
   {{end}}
   {{- if ne $method.Ret "void"}}
-  return {{cToGo $method.Ret}}(ret)
+  return {{cToGo $method.Ret "" "ret"}}
   {{- end }}
 }
 {{end}}

@@ -136,23 +136,42 @@ func goToC(typ string) (goTyp string) {
 }
 
 // cToGo c value -> go value
-func cToGo(typ string) string {
+func cToGo(typ, prefix, name string) string {
+	name = prefix + name
 	if typ == "" {
-		return ""
+		return name
 	}
 	goTyp := strings.Replace(typ, "const", "", -1)
 	goTyp = strings.Trim(goTyp, " ")
 	switch goTyp {
 	case "char *":
-		return "cPtr2GoStr"
+		goTyp = "cPtr2GoStr"
 	case "bool":
-		return "c2goBool"
+		goTyp = "c2goBool"
+	case "void":
+		return ""
+	case "int", "int64":
+		goTyp = "int"
+	case "double":
+		goTyp = "goFloat64"
+	case "short":
+		goTyp = "int16"
+	case "char":
+		goTyp = "byte"
 	default:
+		if strings.Contains(goTyp, "char [") {
+			lenStr := strLen(goTyp)
+			return fmt.Sprintf("c2goStr(&%s[0], %d)", name, lenStr)
+		}
 		if strings.HasPrefix(typ, "CThost") {
-			return "New" + typ[0:len(typ)-2]
+			goTyp = fmt.Sprintf("New%s", typ[0:len(typ)-2])
+		} else if strings.HasSuffix(goTyp, "Spi *") {
+			goTyp = goTyp[0 : len(goTyp)-2]
+		} else if goTyp[len(goTyp)-1] == '*' {
+			goTyp = "* " + goTyp[0:len(goTyp)-2]
 		}
 	}
-	return goTyp
+	return fmt.Sprintf("%s(%s)", goTyp, name)
 }
 
 func isStrArray(args []Argument) bool {

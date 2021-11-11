@@ -27,11 +27,7 @@ func New{{$struct.Name}}(p *C.{{$struct.Name}}) *{{$struct.Name}}{
   }
   ret := new({{$struct.Name}})
   {{range $field := $struct.Fields -}}
-    {{if isCStr $field.Type -}}
-  ret.{{$field.Name}} = c2goStr(&p.{{$field.Name}}[0], {{strLen $field.Type}})
-    {{else -}}
-  ret.{{$field.Name}} = {{goType $field.Type}}(p.{{$field.Name}})
-    {{end -}}
+  ret.{{$field.Name}} = {{cToGo $field.Type "p." $field.Name}}
   {{end -}}
   return ret
 }

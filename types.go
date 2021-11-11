@@ -53,6 +53,7 @@ func (sl *StructList) GenerateGo(pkg, dir string) (err error) {
 		"goFieldName": goFieldName,
 		"isCStr":      isCStr,
 		"strLen":      strLen,
+		"cToGo":       cToGo,
 	}
 	tmpl, err := template.New("types_go").Funcs(fns).Parse(TypesSource)
 	if err != nil {

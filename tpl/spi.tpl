@@ -60,7 +60,7 @@ func {{$.prefix}}{{$method.Name}}(ptr uint64
     p := get{{$.className}}(ptr)
     if p != nil{
      {{- range $i, $arg := $method.Args}}
-     go{{- $arg.Name}} := {{cToGo $arg.Type}}({{$arg.Name}})
+     go{{- $arg.Name}} := {{cToGo $arg.Type "" $arg.Name}}
      {{- end}}
       p.{{$method.Name}}(
   {{- range $i, $arg := $method.Args}}
