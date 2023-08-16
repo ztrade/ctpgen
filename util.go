@@ -25,7 +25,7 @@ func goFieldName(name string) string {
 }
 
 func isCStr(typ string) bool {
-	if strings.Contains(typ, "char [") {
+	if strings.Contains(typ, "char [") || strings.Contains(typ, "char[") {
 		return true
 	}
 	return false
@@ -96,7 +96,7 @@ func goType(cType string) string {
 		if cType == "char *[]" {
 			return "[]string"
 		}
-		if strings.Contains(cType, "char [") || strings.Contains(cType, "char *") {
+		if strings.Contains(cType, "char [") || strings.Contains(cType, "char[") || strings.Contains(cType, "char *") {
 			return "string"
 		}
 		if strings.HasSuffix(cType, "Spi *") {
@@ -159,7 +159,7 @@ func cToGo(typ, prefix, name string) string {
 	case "char":
 		goTyp = "byte"
 	default:
-		if strings.Contains(goTyp, "char [") {
+		if strings.Contains(goTyp, "char [") || strings.Contains(goTyp, "char[") {
 			lenStr := strLen(goTyp)
 			return fmt.Sprintf("c2goStr(&%s[0], %d)", name, lenStr)
 		}
@@ -212,6 +212,7 @@ func freeMethod(typ, prefix, arg string) string {
 
 func strLen(typ string) int {
 	typ = strings.Replace(typ, "char [", "", 1)
+	typ = strings.Replace(typ, "char[", "", 1)
 	typ = strings.Replace(typ, "]", "", 1)
 	typ = strings.Trim(typ, " ")
 	n, err := strconv.Atoi(typ)
